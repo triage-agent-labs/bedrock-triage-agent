@@ -1,9 +1,104 @@
-<!DOCTYPE html>
+<!doctype html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <title>Home</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Bedrock Triage Agent</title>
+    <style>
+        body{font-family:system-ui,Segoe UI,Arial;margin:2rem;line-height:1.4}
+        textarea{width:100%;height:8rem}
+        .card{border:1px solid #ddd;border-radius:12px;padding:1rem;margin-top:1rem}
+        table{border-collapse:collapse;margin-top:.5rem;width:100%}
+        td,th{border:1px solid #ddd;padding:.5rem .75rem;text-align:left;vertical-align:top}
+        .row{display:flex;align-items:center;gap:.5rem;margin-top:.75rem}
+        .spinner{display:inline-block;width:16px;height:16px;border:2px solid #ddd;border-top-color:#333;border-radius:50%;animation:spin 1s linear infinite}
+        .hidden{display:none}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .hint{margin-top:1rem;color:#666;font-size:.9rem}
+        pre{white-space:pre-wrap;margin:0}
+    </style>
 </head>
 <body>
-<h1 th:text="${message}"></h1>
+<h1>🧭 Bedrock Triage Agent</h1>
+
+<form id="triage-form" action="/api/triage" method="post">
+    <label for="text"><strong>Describe the issue:</strong></label>
+    <textarea id="text" name="text" placeholder="Paste error message, stacktrace, or question..." required></textarea>
+    <div class="row">
+        <button id="submit-btn" type="submit">Analyze</button>
+        <span id="spinner" class="spinner hidden" aria-hidden="true"></span>
+    </div>
+</form>
+
+<div id="result-card" class="card hidden" aria-live="polite" th:classappend="${result} ? '' : ' hidden'">
+    <h3>Result</h3>
+    <table>
+        <tr><th>Category</th><td id="r-category" th:text="${result != null}? ${result.category()} : ''"></td></tr>
+        <tr><th>Severity</th><td id="r-severity" th:text="${result != null}? ${result.severity()} : ''"></td></tr>
+        <tr><th>Summary</th><td id="r-summary" th:text="${result != null}? ${result.summary()} : ''"></td></tr>
+        <tr><th>Original</th><td><pre id="r-text" th:text="${result != null}? ${result.text()} : ''"></pre></td></tr>
+    </table>
+    <details style="margin-top:.5rem">
+        <summary>Raw JSON</summary>
+        <pre id="r-json"></pre>
+    </details>
+</div>
+
+<p class="hint">API: <code>POST /api/triage</code> with <code>{"text":"hello"}</code></p>
+
+<script>
+    (function () {
+        const form = document.getElementById('triage-form');
+        const textarea = document.getElementById('text');
+        const btn = document.getElementById('submit-btn');
+        const spinner = document.getElementById('spinner');
+        const card = document.getElementById('result-card');
+        const $ = (id) => document.getElementById(id);
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = textarea.value.trim();
+            if (!text) { textarea.focus(); return; }
+
+            btn.disabled = true;
+            spinner.classList.remove('hidden');
+
+            try {
+                const res = await fetch('/api/triage', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+
+                // If Spring returns non-2xx we still try to read JSON for error details
+                const data = await res.json().catch(() => ({}));
+
+                $('r-category').textContent = data.category ?? (res.ok ? '' : 'ERROR');
+                $('r-severity').textContent = data.severity ?? (res.ok ? '' : 'HIGH');
+                $('r-summary').textContent  = data.summary  ?? (res.ok ? '' : 'Failed to call /api/triage');
+                $('r-text').textContent     = data.text     ?? text;
+                $('r-json').textContent     = JSON.stringify(data, null, 2);
+
+                card.classList.remove('hidden');
+                window.scrollTo({ top: card.offsetTop - 12, behavior: 'smooth' });
+            } catch (err) {
+                $('r-category').textContent = 'ERROR';
+                $('r-severity').textContent = 'HIGH';
+                $('r-summary').textContent  = 'Network error while calling /api/triage';
+                $('r-text').textContent     = String(err);
+                $('r-json').textContent     = '';
+                card.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        });
+
+        // Optional: Ctrl/Cmd+Enter to submit
+        textarea.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') form.requestSubmit();
+        });
+    })();
+</script>
 </body>
 </html>
