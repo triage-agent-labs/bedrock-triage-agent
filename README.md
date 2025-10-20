@@ -59,3 +59,26 @@ output = json
 sso_start_url = https://d-xxxxxxxx.awsapps.com/start
 sso_registration_scopes = sso:account:access
 sso_region = us-east-1
+
+## Architecture
+```mermaid
+flowchart TD
+  U[User] --> UI[/Web UI (Thymeleaf)/]
+  UI -->|POST /api/triage| C[ApiController]
+  C --> S[TriageService]
+  S -->|profile=bedrock| B[BedrockRuntimeClient (AWS SDK v2)]
+  B -->|invokeModel| M[Claude 3 Haiku via Bedrock]
+  S -->|profile=mock| MK[MockTriageService]
+  S --> R([Result: Category, Severity, Summary])
+  R --> UI
+  UI -.-> A[Spring Actuator /actuator/health]:::dim  %% dotted line to show health check
+
+  subgraph Spring Boot App
+    C
+    S
+    MK
+    B
+  end
+
+  classDef dim fill:#eee,stroke:#888,color:#333
+  ```
